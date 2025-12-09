@@ -627,7 +627,9 @@
 - `distribution`
 - `funding`
 - `hasPart`
+- `healthCondition`
 - `includedInDataCatalog`
+- `infectiousAgent`
 - `isBasedOn`
 - `isPartOf`
 - `isRelatedTo`
@@ -636,6 +638,7 @@
 - `measurementTechnique`
 - `name`
 - `nctid`
+- `sourceOrganization`
 - `species`
 - `temporalCoverage`
 - `topicCategory`
