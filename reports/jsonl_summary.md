@@ -20,7 +20,7 @@
 | Ncbi Geo | `ncbi_geo.jsonl` | 246,504 | 116,955 | 26,099 | 222,849 | 5,762 |
 | Ncbi Sra | `ncbi_sra.jsonl` | 363,549 | 57,888 | 116,903 | 187,763 | 294 |
 | Ndex | `ndex.jsonl` | 10,843 | 1,121 | 96 | 9,323 | 59 |
-| Nichd Dash | `nichd_dash.jsonl` | 1 | 0 | 0 | 1 | 0 |
+| Nichd Dash | `nichd_dash.jsonl` | 9,500 | 5,780 | 2,215 | 6,637 | 1,752 |
 | Omics Discovery Index Omicsdi | `omics_discovery_index_omicsdi.jsonl` | 107,221 | 46,640 | 12,422 | 32,975 | 1,615 |
 | Project Tycho | `project_tycho.jsonl` | 597 | 597 | 597 | 597 | 597 |
 | Qiita | `qiita.jsonl` | 843 | 324 | 272 | 252 | 43 |
