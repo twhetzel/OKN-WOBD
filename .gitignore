@@ -1,5 +1,7 @@
 # Custom 
 data/raw/*_state.json
+data/raw/*.jsonl
+data/gene_expression/*
 data/rdf/*
 reports/segmentation_warnings_log.json
 
