@@ -1,5 +1,6 @@
 # Custom 
 data/raw/*_state.json
+data/rdf/*
 reports/segmentation_warnings_log.json
 
 # Byte-compiled / optimized / DLL files
