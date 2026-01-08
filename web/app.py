@@ -7,7 +7,7 @@ from wobd_web import __doc__ as wobd_web_doc
 from wobd_web.config import CONFIG_ENV_VAR, load_config
 from wobd_web.executor import run_plan
 from wobd_web.models import AnswerBundle
-from wobd_web.router import GeneExprMode, build_query_plan
+from wobd_web.router import build_query_plan
 
 
 # EXAMPLE_QUESTIONS: List[str] = [
@@ -48,22 +48,6 @@ def main() -> None:
     # Sidebar controls
     with st.sidebar:
         st.header("Options")
-        include_frink = st.checkbox("Include FRINK", value=False)
-
-        gene_expr_mode_label = st.selectbox(
-            "Gene expression mode",
-            options=["Off", "SPARQL", "Web-MCP", "Local"],
-            index=1,  # default to SPARQL for now
-        )
-        mode_map = {
-            "Off": "off",
-            "SPARQL": "sparql",
-            "Web-MCP": "web_mcp",
-            "Local": "local",
-        }
-        gene_expr_mode: GeneExprMode = mode_map[gene_expr_mode_label]  # type: ignore[assignment]
-        include_gene_expr = gene_expr_mode != "off"
-
         show_sparql = st.checkbox(
             "Show generated SPARQL", value=cfg.ui.show_generated_sparql
         )
@@ -84,9 +68,11 @@ def main() -> None:
                 st.session_state["question_input"] = q
 
     # Main chat interface
-    question = st.text_input(
+    question = st.text_area(
         "Ask a question about the data:",
         key="question_input",
+        height=100,
+        help="Type your question here. You can resize this box by dragging the bottom-right corner.",
     )
     col_submit, col_clear = st.columns([1, 1])
     with col_submit:
@@ -100,12 +86,7 @@ def main() -> None:
     answer_bundle: AnswerBundle | None = None
     if run_clicked and question.strip():
         with st.spinner("Generating queries and fetching results..."):
-            plan = build_query_plan(
-                question=question.strip(),
-                include_frink=include_frink,
-                include_gene_expr=include_gene_expr,
-                gene_expr_mode=gene_expr_mode,
-            )
+            plan = build_query_plan(question=question.strip())
             answer_bundle = run_plan(plan, question=question.strip(), apply_limit=apply_query_limit)
             st.session_state["history"].append((question.strip(), answer_bundle))
 

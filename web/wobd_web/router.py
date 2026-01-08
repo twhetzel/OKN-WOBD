@@ -13,7 +13,6 @@ GeneExprMode = Literal["off", "sparql", "web_mcp", "local"]
 
 @dataclass
 class RouterOptions:
-    include_frink: bool
     include_gene_expr: bool
     gene_expr_mode: GeneExprMode
 
@@ -27,21 +26,15 @@ def _default_gene_expr_mode(cfg: AppConfig) -> GeneExprMode:
     return "sparql"
 
 
-def build_query_plan(
-    question: str,
-    include_frink: bool,
-    include_gene_expr: bool,
-    gene_expr_mode: GeneExprMode | None = None,
-) -> QueryPlan:
+def build_query_plan(question: str) -> QueryPlan:
     """
-    Build a QueryPlan for the given natural-language question and UI toggles.
+    Build a QueryPlan for the given natural-language question.
 
     First checks for preset queries. If found, uses the preset SPARQL.
     Otherwise, falls back to NL→SPARQL generation.
 
-    - NDE is always included by default.
-    - FRINK is optionally included if both toggled on and configured.
-    - Gene expression is optionally included depending on the selected / default mode.
+    - NDE is always included by default (queries NDE data in FRINK).
+    - Gene expression is automatically included if configured (via FRINK SPARQL endpoint).
     """
 
     # Check for preset query first
@@ -89,26 +82,16 @@ def build_query_plan(
         )
     )
 
-    # FRINK optional, only if endpoints are configured.
-    if include_frink and cfg.frink_endpoints:
-        actions.append(
-            SourceAction(
-                source_id="frink",
-                kind="frink",
-                query_text="",
-                mode="interactive",
-            )
-        )
-
-    # Gene expression optional.
-    if include_gene_expr:
-        mode = gene_expr_mode or _default_gene_expr_mode(cfg)
-        if mode != "off":
+    # Gene expression is automatically included if configured (via FRINK SPARQL endpoint)
+    gene_expr_cfg = cfg.gene_expr
+    if isinstance(gene_expr_cfg, dict):
+        sparql_cfg = gene_expr_cfg.get("sparql", {})
+        if sparql_cfg.get("endpoints"):
             actions.append(
                 SourceAction(
                     source_id="gene_expression",
                     kind="gene_expression",
-                    query_text="",
+                    query_text="",  # to be filled by NL→SPARQL
                     mode="interactive",
                 )
             )

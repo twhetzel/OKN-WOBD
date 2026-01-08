@@ -119,15 +119,13 @@ select among them by changing `WOBD_CONFIG_PATH`.
 ## UI overview
 
 - **Sidebar**
-  - Toggle **Include FRINK**.
-  - Choose gene expression mode: Off / SPARQL / Web-MCP / Local.
   - Toggles for **Show generated SPARQL** and **Show provenance**.
   - Toggle **Apply query limit** - controls whether query results are limited to `max_rows` (from config, default: 200). Uncheck to get all results.
   - A list of example questions that pre-fill the main input.
 - **Main area**
   - Chat-like history of questions and answers.
   - Latest answer summary text.
-  - Tabs per source (e.g., `nde`, `frink`, `gene_expression`) showing result
+  - Tabs per source (e.g., `nde`, `gene_expression`) showing result
     tables.
   - Optional expanders for generated SPARQL and provenance.
   - Info message when query limits are applied (with instructions on how to disable).
