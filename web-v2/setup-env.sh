@@ -1,0 +1,33 @@
+#!/bin/bash
+# Setup script for environment variables
+
+echo "Setting up .env.local file..."
+
+if [ -f .env.local ]; then
+  echo "⚠️  .env.local already exists. Backing up to .env.local.backup"
+  cp .env.local .env.local.backup
+fi
+
+cat > .env.local << 'EOF'
+# OpenAI API Key (for Open Query NL→SPARQL)
+# Get your key from: https://platform.openai.com/api-keys
+OPENAI_SHARED_API_KEY=sk-your-key-here
+
+# Budget limits for shared OpenAI key (optional)
+SHARED_BUDGET_USD=20
+SHARED_BUDGET_STOP_USD=19.5
+
+# FRINK Federation Endpoint (optional - already configured in context pack)
+# Only set this if you want to override the default
+# NEXT_PUBLIC_FRINK_FEDERATION_URL=https://frink.apps.renci.org/federation/sparql
+EOF
+
+echo "✅ Created .env.local"
+echo ""
+echo "📝 Next steps:"
+echo "1. Edit .env.local and replace 'sk-your-key-here' with your actual OpenAI API key"
+echo "2. Restart the dev server: npm run dev"
+echo ""
+echo "💡 The FRINK endpoint is already configured in context/packs/wobd.yaml"
+echo "   No additional setup needed for FRINK!"
+
