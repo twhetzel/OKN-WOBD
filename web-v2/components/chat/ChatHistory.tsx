@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import type { ChatMessage } from "@/types";
 
 interface ChatHistoryProps {
@@ -109,7 +109,11 @@ function MessageBubble({
         onClick={isSelectable ? onSelect : undefined}
       >
         {/* Message content */}
-        <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        {isUser && message.lane === "raw" && message.content ? (
+          <CollapsibleSPARQL query={message.content} />
+        ) : (
+          <div className="whitespace-pre-wrap break-words text-sm">{message.content}</div>
+        )}
 
         {/* Partial matches selection UI - only show if no high-confidence matches AND fallback was not used */}
         {!isUser && hasPartialMatches && !hasHighConfidenceMatches && !fallbackUsed && (
@@ -208,6 +212,103 @@ function MessageBubble({
           {new Date(message.timestamp).toLocaleTimeString()}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CollapsibleSPARQL({ query }: { query: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    // Generate summary when component mounts
+    async function generateSummary() {
+      setIsLoadingSummary(true);
+      try {
+        const response = await fetch("/api/tools/sparql/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sparql: query }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setSummary(result.summary);
+        }
+      } catch (error) {
+        console.error("Failed to generate SPARQL summary:", error);
+      } finally {
+        setIsLoadingSummary(false);
+      }
+    }
+
+    generateSummary();
+  }, [query]);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(query);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy SPARQL query:", error);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Summary */}
+      {isLoadingSummary ? (
+        <div className="text-sm italic text-slate-300">
+          Generating summary...
+        </div>
+      ) : summary ? (
+        <div className="text-sm font-medium">
+          {summary}
+        </div>
+      ) : null}
+
+      {/* Expand/Collapse button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }}
+        className="flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors"
+      >
+        <span>{isExpanded ? "▼" : "▶"}</span>
+        <span>{isExpanded ? "Hide" : "Show"} SPARQL query</span>
+      </button>
+
+      {isExpanded && (
+        <div className="mt-2 relative">
+          {/* Copy button in top-right corner */}
+          <button
+            onClick={handleCopy}
+            className="absolute top-2 right-2 z-10 p-1.5 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+            title="Copy SPARQL query"
+          >
+            {copied ? (
+              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            )}
+          </button>
+          
+          <div className="p-3 pr-12 bg-slate-800/50 rounded border border-slate-700 overflow-x-auto">
+            <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap break-words">
+              {query}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

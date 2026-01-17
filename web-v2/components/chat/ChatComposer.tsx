@@ -16,10 +16,14 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
   const [lane, setLane] = useState<Lane>("template");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shouldAutoFocus, setShouldAutoFocus] = useState(false);
+  const [showModifyInput, setShowModifyInput] = useState(false);
+  const [modifyInstruction, setModifyInstruction] = useState("");
+  const [isModifying, setIsModifying] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sparqlEditorRef = useRef<SparqlEditorRef>(null);
   const lastCommandRef = useRef<string | null>(null);
   const shouldFocusRef = useRef(false);
+  const manualModeChangeRef = useRef(false); // Track manual button clicks
 
   // Detect lane from input and handle mode switching
   useEffect(() => {
@@ -96,14 +100,23 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
     // If no commands and no input, ensure default is template mode
     // But don't reset if we just handled a command (check lastCommandRef)
     // Only reset if we're not in the middle of a command switch
-    if (!textTrimmed && !sparqlTrimmed && lastCommandRef.current !== "/sparql" && lastCommandRef.current !== "/text") {
+    // IMPORTANT: Don't reset if we're currently modifying a query OR if we're in raw mode with content
+    // ALSO: Don't reset if the user just manually clicked a mode button
+    const shouldNotReset = isModifying || 
+                           manualModeChangeRef.current ||
+                           (lane === "raw" && sparqlValue.trim().length > 0) ||
+                           lastCommandRef.current === "/sparql" || 
+                           lastCommandRef.current === "/text";
+    
+    if (!textTrimmed && !sparqlTrimmed && !shouldNotReset) {
       // Only reset to template if we're not already there and we haven't just switched modes
       if (lane !== "template") {
+        console.log("[ChatComposer] Auto-switching to template mode (both inputs empty)");
         setLane("template");
       }
       lastCommandRef.current = null;
     }
-  }, [textValue, sparqlValue, lane]);
+  }, [textValue, sparqlValue, lane, isModifying]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -156,29 +169,99 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
     }
   }
 
+  // Handle SPARQL query modification with AI
+  async function handleModifyQuery() {
+    if (!modifyInstruction.trim() || !sparqlValue.trim()) return;
+    await handleModifyQueryWithInstruction(modifyInstruction);
+  }
+
+  // Helper function that takes instruction directly (for quick actions)
+  async function handleModifyQueryWithInstruction(instruction: string) {
+    if (!instruction.trim() || !sparqlValue.trim()) return;
+    
+    setIsModifying(true);
+    try {
+      const response = await fetch("/api/tools/sparql/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sparql: sparqlValue,
+          instruction: instruction,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to modify query");
+      }
+
+      const result = await response.json();
+      
+      // Check if validation failed and the fallback (original query) was returned
+      if (result.fallback_used && result.validation_errors) {
+        console.warn("[ChatComposer] Query modification produced invalid SPARQL:", result.validation_errors);
+        alert(`⚠️ The AI-generated query had syntax errors and couldn't be applied:\n\n${result.validation_errors.join('\n')}\n\nThe original query has been kept. Please try a different instruction or modify the query manually.`);
+        setShowModifyInput(false);
+        return;
+      }
+      
+      // Only update if we got a valid modified query
+      if (result.modified_query && result.modified_query.trim().length > 0) {
+        setSparqlValue(result.modified_query);
+        setModifyInstruction("");
+        setShowModifyInput(false);
+      } else {
+        console.error("[ChatComposer] Received empty modified query, keeping original");
+        // Keep the modify panel open so user can try again
+      }
+    } catch (error) {
+      console.error("Failed to modify query:", error);
+      // TODO: Could show an error toast here
+    } finally {
+      setIsModifying(false);
+    }
+  }
+
+  // Quick action presets for common modifications
+  const quickActions = [
+    { label: "Add LIMIT 50", instruction: "Add LIMIT 50 to this query" },
+    { label: "Remove LIMIT", instruction: "Remove the LIMIT clause" },
+    { label: "Add description", instruction: "Add ?description to the SELECT clause and an OPTIONAL clause to fetch schema:description" },
+    { label: "Count only", instruction: "Change this to a COUNT query that returns the total number of results" },
+  ];
+
   // Handle mode switching via clicks
   const handleModeClick = (newLane: Lane) => {
+    console.log(`[ChatComposer] Switching from ${lane} to ${newLane}`);
+    
+    // Mark that this is a manual mode change
+    manualModeChangeRef.current = true;
+    
     if (newLane === "raw") {
-      // Switching TO raw mode - clear text
+      // Switching TO raw mode
       if (lane !== "raw") {
+        // Don't clear sparqlValue if it already has content
+        // Only clear textValue
         setTextValue("");
-        setSparqlValue(""); // Clear any existing SPARQL
+        if (!sparqlValue.trim()) {
+          // Only clear SPARQL if it's empty
+          setSparqlValue("");
+        }
         setShouldAutoFocus(true); // Auto-focus SPARQL editor
       }
     } else {
-      // Switching TO template/text mode (from raw) - clear SPARQL
+      // Switching TO template/text mode (from raw)
       if (lane === "raw") {
-        setSparqlValue("");
-        setShouldAutoFocus(false); // Don't auto-focus textarea, it will be focused by the effect
-        // If there's text in sparqlValue, move it to textValue
-        if (sparqlValue.trim()) {
-          setTextValue(sparqlValue);
-          setSparqlValue("");
-        }
+        // Don't clear sparqlValue - keep it in case user switches back
+        setShouldAutoFocus(false);
       }
     }
     shouldFocusRef.current = true;
     setLane(newLane);
+    
+    // Reset the manual flag after a short delay (after useEffect has run)
+    setTimeout(() => {
+      manualModeChangeRef.current = false;
+    }, 100);
   };
 
   // Auto-resize textarea based on content
@@ -233,6 +316,8 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
           type="button"
           onClick={(e) => {
             e.preventDefault();
+            e.stopPropagation();
+            console.log("[ChatComposer] Text button clicked");
             handleModeClick("template");
           }}
           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${lane === "template"
@@ -247,6 +332,8 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
           type="button"
           onClick={(e) => {
             e.preventDefault();
+            e.stopPropagation();
+            console.log("[ChatComposer] SPARQL button clicked, current lane:", lane);
             handleModeClick("raw");
           }}
           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${lane === "raw"
@@ -278,15 +365,88 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
 
       {/* Input area - textarea for Text mode, SPARQL editor for SPARQL mode */}
       {lane === "raw" ? (
-        <div className="border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden" style={{ height: "200px", minHeight: "200px" }}>
-          <SparqlEditor
-            ref={sparqlEditorRef}
-            value={sparqlValue}
-            onChange={setSparqlValue}
-            onExecute={() => onSubmit(new Event("submit") as any)}
-            height="200px"
-            autoFocus={shouldAutoFocus}
-          />
+        <div className="space-y-2">
+          <div className="border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden" style={{ height: "200px", minHeight: "200px" }}>
+            <SparqlEditor
+              ref={sparqlEditorRef}
+              value={sparqlValue}
+              onChange={setSparqlValue}
+              onExecute={() => onSubmit(new Event("submit") as any)}
+              height="200px"
+              autoFocus={shouldAutoFocus}
+            />
+          </div>
+          
+          {/* AI Modify feature */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowModifyInput(!showModifyInput)}
+                disabled={!sparqlValue.trim()}
+                className="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded-md transition-colors flex items-center gap-1"
+                title="Use AI to modify your SPARQL query"
+              >
+                <span>✨</span>
+                <span>{showModifyInput ? "Cancel" : "Modify with AI"}</span>
+              </button>
+              {!showModifyInput && sparqlValue.trim() && (
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Ask AI to modify your query (e.g., "add LIMIT 100")
+                </span>
+              )}
+            </div>
+            
+            {showModifyInput && (
+              <div className="space-y-2">
+                {/* Quick actions */}
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 self-center">Quick:</span>
+                  {quickActions.map((action) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      onClick={() => handleModifyQueryWithInstruction(action.instruction)}
+                      disabled={isModifying}
+                      className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-300 rounded transition-colors"
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom instruction input */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={modifyInstruction}
+                    onChange={(e) => setModifyInstruction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleModifyQuery();
+                      } else if (e.key === "Escape") {
+                        setShowModifyInput(false);
+                        setModifyInstruction("");
+                      }
+                    }}
+                    placeholder="Or type a custom instruction..."
+                    className="flex-1 px-3 py-1.5 text-sm bg-slate-800 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 placeholder-slate-500"
+                    disabled={isModifying}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleModifyQuery}
+                    disabled={isModifying || !modifyInstruction.trim()}
+                    className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:text-slate-400 text-white rounded-md transition-colors"
+                  >
+                    {isModifying ? "Modifying..." : "Apply"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <textarea

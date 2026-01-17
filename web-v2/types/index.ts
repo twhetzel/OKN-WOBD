@@ -120,9 +120,9 @@ export interface OntologyQueryState {
     identified_entities?: Array<{ term: string; domain: string; ontology: string }>;
     primary_entity?: { term: string; domain: string; ontology: string };
     search_terms_used?: string[];
-    mondo_query_executed?: boolean;
-    mondo_query_result_count?: number;
-    mondo_query_sample?: string;
+    ontology_query_executed?: boolean; // Generic name - applies to MONDO, NCBITaxon, Wikidata, etc.
+    ontology_query_result_count?: number; // Generic name - applies to any ontology
+    ontology_query_sample?: string;
     alternatives_used?: boolean;
     has_gene_expression?: boolean;
     recommended_graphs?: string[];

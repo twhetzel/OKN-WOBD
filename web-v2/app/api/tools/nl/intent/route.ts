@@ -97,46 +97,97 @@ export async function POST(request: Request) {
         if (ontologyState.grounded_mondo_terms.length > 0) {
           const entityType = ontologyState.entity_type || "disease";
           
-          // Collect all high-confidence matches (score 4 or 3) from all grounded entities
-          // Priority: score 4 (exact label) > score 3 (exact synonym) > score 2 (other synonyms)
-          // This ensures we use all entities that were identified (e.g., "asthma" AND "allergic rhinitis")
-          const score4Terms = ontologyState.grounded_mondo_terms
-            .filter(term => (term.matchScore || 0) === 4 && term.matchType === "label");
-          const score3Terms = ontologyState.grounded_mondo_terms
-            .filter(term => (term.matchScore || 0) === 3);
-          const score2Terms = ontologyState.grounded_mondo_terms
-            .filter(term => (term.matchScore || 0) === 2);
+          // Collect all high-confidence matches (score >= 2) from all grounded entities
+          // When we have multiple entity types (disease, species, drug), we want to include ALL of them
+          // even if they have different scores, so we can populate multiple slots
+          const identifiedEntities = ontologyState.debug_info?.identified_entities || [];
+          const hasMultipleEntityTypes = new Set(identifiedEntities.map((e: any) => e.domain.toLowerCase())).size > 1;
           
-          // Select terms: prefer score 4, then score 3, then score 2 (up to 5 total to handle multiple entities)
           let selectedTerms: typeof ontologyState.grounded_mondo_terms = [];
-          if (score4Terms.length > 0) {
-            // Use all score 4 matches (exact label matches are highest quality)
-            selectedTerms = score4Terms.slice(0, 5);
-          } else if (score3Terms.length > 0) {
-            // Use all score 3 matches (exact synonym matches)
-            selectedTerms = score3Terms.slice(0, 5);
-          } else if (score2Terms.length > 0) {
-            // Use score 2 matches (other synonym types)
-            selectedTerms = score2Terms.slice(0, 5);
+          
+          if (hasMultipleEntityTypes) {
+            // When we have multiple entity types, include ALL terms with score >= 1
+            // This ensures we get disease, species, and drug terms all together
+            selectedTerms = ontologyState.grounded_mondo_terms
+              .filter(term => (term.matchScore || 0) >= 1)
+              .slice(0, 10); // Allow more terms when we have multiple types
+            console.log(`[Intent] Multiple entity types detected, using ${selectedTerms.length} terms across all types`);
           } else {
-            // Fallback to best match if no high-confidence matches
-            selectedTerms = [ontologyState.grounded_mondo_terms[0]];
+            // Single entity type - use the original high-confidence logic
+            const score4Terms = ontologyState.grounded_mondo_terms
+              .filter(term => (term.matchScore || 0) === 4 && term.matchType === "label");
+            const score3Terms = ontologyState.grounded_mondo_terms
+              .filter(term => (term.matchScore || 0) === 3);
+            const score2Terms = ontologyState.grounded_mondo_terms
+              .filter(term => (term.matchScore || 0) === 2);
+            
+            if (score4Terms.length > 0) {
+              selectedTerms = score4Terms.slice(0, 5);
+            } else if (score3Terms.length > 0) {
+              selectedTerms = score3Terms.slice(0, 5);
+            } else if (score2Terms.length > 0) {
+              selectedTerms = score2Terms.slice(0, 5);
+            } else {
+              selectedTerms = [ontologyState.grounded_mondo_terms[0]];
+            }
           }
           
-          // Get the IRIs (which are in the correct format - MONDO for diseases, UniProt for species)
-          const termIRIs = selectedTerms.map(term => term.mondo);
+          // Group terms by their entity type (from identified_entities)
+          // This allows us to populate multiple slots when we have entities of different types
+          const diseaseTerms: typeof selectedTerms = [];
+          const speciesTerms: typeof selectedTerms = [];
+          const drugTerms: typeof selectedTerms = [];
           
-          // Set the appropriate slot based on entity type
-          if (entityType === "species" || entityType === "organism") {
-            // For species/organism entities, use species slot with UniProt taxonomy IRIs
-            intent.slots.species = termIRIs;
-            console.log(`[Intent] Using ${termIRIs.length} species terms for query:`, 
-              selectedTerms.map(t => `${t.obo_id || t.mondo} (${t.label}, score: ${t.matchScore})`).join(", "));
-          } else {
-            // For disease entities, use health_conditions slot with MONDO IRIs
-            intent.slots.health_conditions = termIRIs;
-            console.log(`[Intent] Using ${termIRIs.length} MONDO terms for query:`, 
-              selectedTerms.map(t => `${t.obo_id || t.mondo} (${t.label}, score: ${t.matchScore})`).join(", "));
+          for (const term of selectedTerms) {
+            // Determine the ontology type from the IRI pattern (more reliable than label matching)
+            const iri = term.mondo || "";
+            
+            if (iri.includes("/MONDO_") || iri.includes("purl.obolibrary.org/obo/MONDO")) {
+              // MONDO IRI -> disease
+              diseaseTerms.push(term);
+            } else if (iri.includes("/taxonomy/") || iri.includes("uniprot.org/taxonomy")) {
+              // UniProt taxonomy IRI -> species
+              speciesTerms.push(term);
+            } else if (iri.includes("wikidata.org/entity/")) {
+              // Wikidata IRI -> drug
+              drugTerms.push(term);
+            } else {
+              // Fallback: try to match by label with identified entities
+              const matchingEntity = identifiedEntities.find((e: any) => 
+                e.term.toLowerCase() === term.label?.toLowerCase() ||
+                term.label?.toLowerCase().includes(e.term.toLowerCase()) ||
+                e.term.toLowerCase().includes(term.label?.toLowerCase())
+              );
+              
+              const domain = matchingEntity?.domain?.toLowerCase() || entityType;
+              
+              if (domain === "species" || domain === "organism") {
+                speciesTerms.push(term);
+              } else if (domain === "drug" || domain === "medication") {
+                drugTerms.push(term);
+              } else {
+                diseaseTerms.push(term);
+              }
+            }
+          }
+          
+          // Set slots for each entity type found
+          if (diseaseTerms.length > 0) {
+            intent.slots.health_conditions = diseaseTerms.map(t => t.mondo);
+            console.log(`[Intent] Using ${diseaseTerms.length} disease terms (MONDO):`, 
+              diseaseTerms.map(t => `${t.obo_id || t.mondo} (${t.label}, score: ${t.matchScore})`).join(", "));
+          }
+          
+          if (speciesTerms.length > 0) {
+            intent.slots.species = speciesTerms.map(t => t.mondo);
+            console.log(`[Intent] Using ${speciesTerms.length} species terms (UniProt):`, 
+              speciesTerms.map(t => `${t.obo_id || t.mondo} (${t.label}, score: ${t.matchScore})`).join(", "));
+          }
+          
+          if (drugTerms.length > 0) {
+            intent.slots.drugs = drugTerms.map(t => t.mondo);
+            console.log(`[Intent] Using ${drugTerms.length} drug terms (Wikidata):`, 
+              drugTerms.map(t => `${t.obo_id || t.mondo} (${t.label}, score: ${t.matchScore})`).join(", "));
           }
           
           intent.slots.nde_encoding = ontologyState.nde_encoding || "iri";

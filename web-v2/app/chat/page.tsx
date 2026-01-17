@@ -28,6 +28,7 @@ export default function ChatPage() {
   const processingQueryRef = useRef<string | null>(null); // Track currently processing query to prevent duplicates
   const processingMessageIdsRef = useRef<Set<string>>(new Set()); // Track message IDs being processed to prevent duplicates
   const wasClearedRef = useRef(false); // Track if messages were manually cleared to prevent auto-query
+  const abortControllerRef = useRef<AbortController | null>(null); // Track abort controller for canceling queries
 
   // Load messages from storage on mount
   useEffect(() => {
@@ -89,6 +90,25 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  function handleCancel() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+      processingQueryRef.current = null;
+
+      // Add cancellation message
+      const cancelMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: "error",
+        content: "Query was cancelled by user.",
+        timestamp: new Date().toISOString(),
+        error: "Cancelled",
+      };
+      setMessages((prev) => [...prev, cancelMessage]);
+    }
+  }
+
   async function handleMessage({
     text,
     lane,
@@ -113,6 +133,10 @@ export default function ChatPage() {
 
     processingQueryRef.current = queryKey;
 
+    // Create abort controller for this query
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     // Add user message (always add it, even if similar ones exist)
     const userMessage: ChatMessage = {
       id: generateMessageId(),
@@ -128,11 +152,16 @@ export default function ChatPage() {
     try {
       let result;
       if (lane === "raw") {
-        result = await executeRawSPARQL(text);
+        result = await executeRawSPARQL(text, "wobd", abortController.signal);
       } else if (lane === "open") {
-        result = await executeOpenQuery(text);
+        result = await executeOpenQuery(text, "wobd", true, abortController.signal);
       } else {
-        result = await executeTemplateQuery(text);
+        result = await executeTemplateQuery(text, "wobd", abortController.signal);
+      }
+
+      // Check if query was aborted
+      if (abortController.signal.aborted) {
+        return;
       }
 
       // Add assistant response (prevent duplicates by checking message ID only)
@@ -148,6 +177,11 @@ export default function ChatPage() {
       });
       setSelectedMessageId(result.message.id);
     } catch (error: any) {
+      // Don't show error if query was cancelled
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        return;
+      }
+
       // Add error message
       const errorMessage: ChatMessage = {
         id: generateMessageId(),
@@ -162,6 +196,7 @@ export default function ChatPage() {
       setIsLoading(false);
       // Clear processing query ref after completion
       processingQueryRef.current = null;
+      abortControllerRef.current = null;
     }
   }
 
@@ -537,9 +572,31 @@ export default function ChatPage() {
           {isLoading && (
             <div ref={isLoadingRef} className="flex justify-start mt-4 p-6">
               <div className="bg-slate-100 dark:bg-slate-800 rounded-lg px-4 py-3 border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <div className="animate-spin h-4 w-4 border-2 border-accent border-t-transparent rounded-full" />
                   <span className="text-slate-600 dark:text-slate-400">Processing query...</span>
+                  <div className="tooltip-container">
+                    <button
+                      onClick={handleCancel}
+                      className="ml-2 p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+                      aria-label="Stop query"
+                    >
+                      <svg
+                        className="w-4 h-4 text-slate-600 dark:text-slate-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                    <span className="tooltip">Stop query</span>
+                  </div>
                 </div>
               </div>
             </div>

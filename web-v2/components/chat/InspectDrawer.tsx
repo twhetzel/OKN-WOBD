@@ -819,21 +819,51 @@ export function InspectDrawer({ message }: InspectDrawerProps) {
                           </ul>
                         </div>
                       )}
-                      {message.ontology_state.debug_info.mondo_query_executed !== undefined && (
+                      {message.ontology_state.debug_info.ontology_query_executed !== undefined && (
                         <p className="text-slate-600 dark:text-slate-400">
-                          MONDO query executed: {message.ontology_state.debug_info.mondo_query_executed ? "Yes" : "No"}
+                          {(() => {
+                            const ontologyName = message.ontology_state.entity_type === "drug" || message.ontology_state.entity_type === "medication" 
+                              ? "Wikidata" 
+                              : message.ontology_state.entity_type === "species" 
+                              ? "NCBITaxon" 
+                              : "MONDO";
+                            const executed = message.ontology_state.debug_info.ontology_query_executed ?? false;
+                            return `${ontologyName} query executed: ${executed ? "Yes" : "No"}`;
+                          })()}
                         </p>
                       )}
-                      {message.ontology_state.debug_info.mondo_query_result_count !== undefined && (
+                      {message.ontology_state.debug_info.ontology_query_result_count !== undefined && (
                         <p className="text-slate-600 dark:text-slate-400">
-                          MONDO query returned: {message.ontology_state.debug_info.mondo_query_result_count} results
+                          {(() => {
+                            const ontologyName = message.ontology_state.entity_type === "drug" || message.ontology_state.entity_type === "medication" 
+                              ? "Wikidata" 
+                              : message.ontology_state.entity_type === "species" 
+                              ? "NCBITaxon" 
+                              : "MONDO";
+                            const count = message.ontology_state.debug_info.ontology_query_result_count ?? 0;
+                            return `${ontologyName} query returned: ${count} results`;
+                          })()}
                         </p>
                       )}
-                      {message.ontology_state.debug_info.mondo_query_result_count === 0 && (
+                      {message.ontology_state.debug_info.ontology_query_result_count === 0 && (
                         <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-2">
-                          ⚠️ No MONDO terms found. This could mean:
+                          ⚠️ No {(() => {
+                            const ontologyName = message.ontology_state.entity_type === "drug" || message.ontology_state.entity_type === "medication" 
+                              ? "Wikidata" 
+                              : message.ontology_state.entity_type === "species" 
+                              ? "NCBITaxon" 
+                              : "MONDO";
+                            return ontologyName;
+                          })()} terms found. This could mean:
                           <ul className="list-disc list-inside ml-4 mt-1">
-                            <li>The terms don't exist in MONDO/Ubergraph</li>
+                            <li>The terms don't exist in {(() => {
+                              const ontologyName = message.ontology_state.entity_type === "drug" || message.ontology_state.entity_type === "medication" 
+                                ? "Wikidata" 
+                                : message.ontology_state.entity_type === "species" 
+                                ? "NCBITaxon" 
+                                : "MONDO/Ubergraph";
+                              return ontologyName;
+                            })()}</li>
                             <li>The query syntax needs adjustment</li>
                             <li>Check server terminal for detailed logs</li>
                           </ul>
