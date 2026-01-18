@@ -14,22 +14,14 @@ interface GroupedRow {
 }
 
 export function ResultsTable({ results, onDownload }: ResultsTableProps) {
+    // All hooks must be called unconditionally at the top - BEFORE any early returns
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [groupByDataset, setGroupByDataset] = useState(false);
 
-    if (!results || !results.results || results.results.bindings.length === 0) {
-        return (
-            <div className="text-center py-8 text-slate-600 dark:text-slate-400">
-                No results to display
-            </div>
-        );
-    }
-
-    const vars = results.head.vars;
-    const bindings = results.results.bindings;
-
-    // Check if we have a dataset column and entity columns (diseaseName, speciesName, etc.)
+    // Compute values safely for useMemo dependencies (even if results is empty)
+    const vars = results?.head?.vars || [];
+    const bindings = results?.results?.bindings || [];
     const hasDatasetColumn = vars.includes("dataset");
     const entityColumns = vars.filter(v => 
         v === "diseaseName" || v === "speciesName" || v === "drugName" || 
@@ -37,7 +29,11 @@ export function ResultsTable({ results, onDownload }: ResultsTableProps) {
     );
 
     // Group results by dataset if enabled and dataset column exists
+    // This hook must be called unconditionally (even if bindings is empty)
     const processedBindings = useMemo(() => {
+        if (bindings.length === 0) {
+            return [];
+        }
         if (!groupByDataset || !hasDatasetColumn) {
             // No grouping - return original bindings
             return bindings.map(b => {
@@ -149,6 +145,15 @@ export function ResultsTable({ results, onDownload }: ResultsTableProps) {
             );
         }
         return String(value);
+    }
+
+    // Early return check AFTER all hooks are called
+    if (!results || !results.results || results.results.bindings.length === 0) {
+        return (
+            <div className="text-center py-8 text-slate-600 dark:text-slate-400">
+                No results to display
+            </div>
+        );
     }
 
     return (
