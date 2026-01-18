@@ -19,21 +19,46 @@ export async function POST(request: Request) {
     // Determine API key
     let apiKey: string | null = null;
 
-    if (use_shared && provider === "openai") {
-      // Check shared budget
-      const budgetCheck = checkBudget();
-      if (!budgetCheck.allowed) {
-        return NextResponse.json(
-          { error: budgetCheck.error || "Shared budget exceeded", code: "SHARED_BUDGET_EXCEEDED" },
-          { status: 402 }
-        );
-      }
+    if (use_shared) {
+      // Use shared key (check budget for tracked providers)
+      if (provider === "openai") {
+        // Check shared budget
+        const budgetCheck = checkBudget();
+        if (!budgetCheck.allowed) {
+          return NextResponse.json(
+            { error: budgetCheck.error || "Shared budget exceeded", code: "SHARED_BUDGET_EXCEEDED" },
+            { status: 402 }
+          );
+        }
 
-      apiKey = process.env.OPENAI_SHARED_API_KEY || null;
-      if (!apiKey) {
+        apiKey = process.env.OPENAI_SHARED_API_KEY || null;
+        if (!apiKey) {
+          return NextResponse.json(
+            { error: "Shared OpenAI API key not configured" },
+            { status: 500 }
+          );
+        }
+      } else if (provider === "anthropic") {
+        // Check shared budget (same budget pool as OpenAI)
+        const budgetCheck = checkBudget();
+        if (!budgetCheck.allowed) {
+          return NextResponse.json(
+            { error: budgetCheck.error || "Shared budget exceeded", code: "SHARED_BUDGET_EXCEEDED" },
+            { status: 402 }
+          );
+        }
+
+        apiKey = process.env.ANTHROPIC_SHARED_API_KEY || null;
+        if (!apiKey) {
+          return NextResponse.json(
+            { error: "Shared Anthropic API key not configured" },
+            { status: 500 }
+          );
+        }
+      } else {
         return NextResponse.json(
-          { error: "Shared OpenAI API key not configured" },
-          { status: 500 }
+          { error: `Shared keys not supported for provider: ${provider}` },
+          { status: 400 }
         );
       }
     } else {
@@ -65,9 +90,9 @@ export async function POST(request: Request) {
 
     const response = await proxyLLMCall(llmRequest, apiKey);
 
-    // Record usage if using shared key
-    if (use_shared && provider === "openai") {
-      recordUsage(model, response.usage.input_tokens, response.usage.output_tokens, "open");
+    // Record usage if using shared key (tracked for both OpenAI and Anthropic)
+    if (use_shared && (provider === "openai" || provider === "anthropic")) {
+      recordUsage(model, response.usage.input_tokens, response.usage.output_tokens, provider === "openai" ? "open" : "anthropic");
     }
 
     return NextResponse.json({

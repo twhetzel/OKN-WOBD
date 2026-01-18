@@ -36,8 +36,8 @@ export async function POST(request: Request) {
         }
 
         // Determine API key and provider
-        const llmProvider = provider || "openai";
-        const llmModel = model || (llmProvider === "openai" ? "gpt-4o-mini" : "claude-3-haiku-20240307");
+        const llmProvider = provider || "anthropic";
+        const llmModel = model || (llmProvider === "openai" ? "gpt-4o-mini" : "claude-sonnet-4-5");
 
         let apiKey: string | null = null;
 

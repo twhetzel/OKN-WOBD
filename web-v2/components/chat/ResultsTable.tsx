@@ -23,8 +23,8 @@ export function ResultsTable({ results, onDownload }: ResultsTableProps) {
     const vars = results?.head?.vars || [];
     const bindings = results?.results?.bindings || [];
     const hasDatasetColumn = vars.includes("dataset");
-    const entityColumns = vars.filter(v => 
-        v === "diseaseName" || v === "speciesName" || v === "drugName" || 
+    const entityColumns = vars.filter(v =>
+        v === "diseaseName" || v === "speciesName" || v === "drugName" ||
         (v.endsWith("Name") && v !== "name" && v !== "datasetName")
     );
 
@@ -97,7 +97,7 @@ export function ResultsTable({ results, onDownload }: ResultsTableProps) {
     const sortedBindings = [...processedBindings].sort((a, b) => {
         if (!sortColumn) return 0;
 
-        const aVal = Array.isArray(a[sortColumn]) 
+        const aVal = Array.isArray(a[sortColumn])
             ? (a[sortColumn] as string[]).join(", ")
             : String(a[sortColumn] || "");
         const bVal = Array.isArray(b[sortColumn])
@@ -172,7 +172,7 @@ export function ResultsTable({ results, onDownload }: ResultsTableProps) {
                         <span>Group by dataset</span>
                     </label>
                 )}
-                
+
                 {/* Download button */}
                 {onDownload && (
                     <button
@@ -218,10 +218,10 @@ export function ResultsTable({ results, onDownload }: ResultsTableProps) {
                                     const isEntityColumn = entityColumns.includes(varName);
                                     const displayValue = formatValueForDisplay(value);
                                     const titleText = formatValue(value);
-                                    
+
                                     return (
-                                        <td 
-                                            key={varName} 
+                                        <td
+                                            key={varName}
                                             className={`px-4 py-2 text-slate-900 dark:text-slate-300 ${isEntityColumn && Array.isArray(value) && value.length > 1 ? "" : ""}`}
                                         >
                                             {isEntityColumn && Array.isArray(value) && value.length > 1 ? (

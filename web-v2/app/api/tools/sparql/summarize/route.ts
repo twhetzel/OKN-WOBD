@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
     try {
-        const { sparql } = await request.json();
+        const { sparql, session_id } = await request.json();
 
         if (!sparql) {
             return NextResponse.json(
@@ -43,15 +43,16 @@ Plain English explanation:`;
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                provider: "openai",
-                model: "gpt-4o-mini",
+                provider: "anthropic",
+                model: "claude-sonnet-4-5",
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
                 ],
                 temperature: 0.3,
                 max_tokens: 150,
-                use_shared: true,
+                use_shared: false, // Anthropic requires BYOK - session_id must be provided
+                session_id: session_id, // Get from request body
             }),
         });
 

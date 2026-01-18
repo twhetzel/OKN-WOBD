@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
     try {
-        const { sparql, instruction } = await request.json();
+        const { sparql, instruction, session_id } = await request.json();
 
         if (!sparql || !instruction) {
             return NextResponse.json(
@@ -82,15 +82,16 @@ Return only the modified SPARQL query with proper syntax:`;
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                provider: "openai",
-                model: "gpt-4o", // Use more capable model for complex SPARQL modifications
+                provider: "anthropic",
+                model: "claude-sonnet-4-5",
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
                 ],
                 temperature: 0.1, // Very low temperature for precision
                 max_tokens: 3000, // More tokens for complex queries
-                use_shared: true,
+                use_shared: false, // Anthropic requires BYOK - session_id must be provided
+                session_id: session_id, // Get from request body
             }),
         });
 

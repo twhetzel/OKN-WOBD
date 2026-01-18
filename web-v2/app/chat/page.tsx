@@ -13,6 +13,7 @@ import {
   clearMessagesFromStorage,
   generateMessageId,
 } from "@/lib/chat/messages";
+import { getSessionId } from "@/lib/chat/session";
 import {
   executeTemplateQuery,
   executeOpenQuery,
@@ -239,7 +240,8 @@ function ChatPage() {
 
       // Generate plan
       const llmEndpoint = "/api/tools/llm/complete";
-      const plan = await planMultiHopQuery(text, pack, llmEndpoint);
+      const sessionId = getSessionId();
+      const plan = await planMultiHopQuery(text, pack, llmEndpoint, sessionId);
 
       // Show plan preview (configurable: auto-execute or wait for approval)
       const autoExecute = true; // TODO: Make this a user setting
