@@ -1,6 +1,6 @@
 # WOBD Web v2
 
-Exa-style chat UI for WOBD with template-based, LLM-generated, and user-generated SPARQL querying. This is a Next.js application that provides a provider-neutral Tool Service API and a modern web interface for querying biomedical datasets.
+Chat UI for WOBD with template-based, LLM-generated, and user-generated SPARQL querying. This is a Next.js application that provides a provider-neutral Tool Service API and a modern web interface for querying biomedical datasets.
 
 ## Architecture Overview
 
@@ -58,8 +58,8 @@ npm install
 2. Set your environment variables:
    ```bash
    OPENAI_SHARED_API_KEY=sk-...  # Optional: for shared OpenAI usage
-   SHARED_BUDGET_USD=20
-   SHARED_BUDGET_STOP_USD=19.5
+   SHARED_BUDGET_USD=5
+   SHARED_BUDGET_STOP_USD=4.5
    NEXT_PUBLIC_FRINK_FEDERATION_URL=https://frink.apps.renci.org/federation/sparql
    ```
 
@@ -187,7 +187,7 @@ WOBD Web v2 supports two modes:
 
 1. **Shared OpenAI Key** (limited free usage)
    - Configured via `OPENAI_SHARED_API_KEY` environment variable
-   - Enforced $20/month budget cap (configurable)
+   - Enforced $5/month budget cap (configurable)
    - Budget tracked server-side
 
 2. **Bring Your Own Key (BYOK)**
@@ -274,8 +274,8 @@ npm start
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OPENAI_SHARED_API_KEY` | Shared OpenAI API key | - |
-| `SHARED_BUDGET_USD` | Monthly budget limit | 20 |
-| `SHARED_BUDGET_STOP_USD` | Budget stop threshold | 19.5 |
+| `SHARED_BUDGET_USD` | Monthly budget limit | 5 |
+| `SHARED_BUDGET_STOP_USD` | Budget stop threshold | 4.5 |
 | `NEXT_PUBLIC_FRINK_FEDERATION_URL` | FRINK federation endpoint | `https://frink.apps.renci.org/federation/sparql` |
 
 ## License

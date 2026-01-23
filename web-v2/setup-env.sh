@@ -19,8 +19,8 @@ OPENAI_SHARED_API_KEY=sk-your-key-here
 
 # Budget limits for shared API keys (optional)
 # Applies to both Anthropic and OpenAI
-SHARED_BUDGET_USD=1
-SHARED_BUDGET_STOP_USD=0.95
+SHARED_BUDGET_USD=5
+SHARED_BUDGET_STOP_USD=4.5
 
 # FRINK Federation Endpoint (optional - already configured in context pack)
 # Only set this if you want to override the default

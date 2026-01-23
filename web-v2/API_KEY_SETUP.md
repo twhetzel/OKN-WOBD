@@ -163,7 +163,7 @@ curl -X POST http://localhost:3000/api/tools/sparql/execute \
 
 ## Budget Tracking
 
-Both OpenAI and Anthropic shared keys share the same budget pool (default: $1/month for testing, configurable via `SHARED_BUDGET_USD`). Budget tracking:
+Both OpenAI and Anthropic shared keys share the same budget pool (default: $5/month, configurable via `SHARED_BUDGET_USD`). Budget tracking:
 - Monitors usage across both providers
 - Enforces monthly spending limits
 - Resets at the start of each month or on server restart
@@ -171,8 +171,8 @@ Both OpenAI and Anthropic shared keys share the same budget pool (default: $1/mo
 
 To adjust the budget limit, set in `.env.local`:
 ```bash
-SHARED_BUDGET_USD=20        # Monthly budget limit (default: $1 for testing)
-SHARED_BUDGET_STOP_USD=19.5 # Stop threshold (default: $0.95 for testing)
+SHARED_BUDGET_USD=5         # Monthly budget limit (default: $5)
+SHARED_BUDGET_STOP_USD=4.5 # Stop threshold (default: $4.5)
 ```
 
 ## Summary
@@ -180,7 +180,7 @@ SHARED_BUDGET_STOP_USD=19.5 # Stop threshold (default: $0.95 for testing)
 - **Anthropic API Key (Required)**: Set `ANTHROPIC_SHARED_API_KEY` in `.env.local` - **This is now the default LLM provider**
 - **OpenAI API Key (Optional)**: Set `OPENAI_SHARED_API_KEY` in `.env.local` if you want to use OpenAI instead
 - **FRINK Endpoint**: Already configured, no action needed ✅
-- **Budget**: Shared budget tracking for both providers (default: $1/month for testing)
+- **Budget**: Shared budget tracking for both providers (default: $5/month)
 - **Restart server**: After setting environment variables, restart `npm run dev`
 
 ### Quick Start
