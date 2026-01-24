@@ -50,18 +50,29 @@ npm install
 
 ### Configuration
 
-1. Copy `.env.example` to `.env.local`:
+1. **Create `.env.local` file** using the setup script:
    ```bash
-   cp .env.example .env.local
+   ./setup-env.sh
    ```
 
-2. Set your environment variables:
+2. **Edit `.env.local`** and add your API keys:
    ```bash
-   OPENAI_SHARED_API_KEY=sk-...  # Optional: for shared OpenAI usage
+   # Required: Anthropic API key (default LLM provider)
+   ANTHROPIC_SHARED_API_KEY=sk-ant-your-actual-key-here
+   
+   # Optional: OpenAI API key (if you prefer OpenAI)
+   OPENAI_SHARED_API_KEY=sk-your-actual-key-here
+   
+   # Budget limits (already set by setup script)
    SHARED_BUDGET_USD=5
    SHARED_BUDGET_STOP_USD=4.5
-   NEXT_PUBLIC_FRINK_FEDERATION_URL=https://frink.apps.renci.org/federation/sparql
    ```
+
+   **Get your API keys:**
+   - **Anthropic**: https://console.anthropic.com/settings/keys (default, recommended)
+   - **OpenAI**: https://platform.openai.com/api-keys (optional)
+
+   **Note:** The app uses **Claude Sonnet 4.5** by default. Anthropic API keys are required for LLM features.
 
 ### Run Development Server
 
@@ -70,6 +81,8 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+**Important:** After setting environment variables, restart the dev server for changes to take effect.
 
 ## Project Structure
 
@@ -183,19 +196,39 @@ The Tool Service API provides stable HTTP endpoints for all WOBD operations:
 
 ## LLM API Key Management
 
-WOBD Web v2 supports two modes:
+WOBD Web v2 supports two modes for providing API keys:
 
-1. **Shared OpenAI Key** (limited free usage)
-   - Configured via `OPENAI_SHARED_API_KEY` environment variable
-   - Enforced $5/month budget cap (configurable)
-   - Budget tracked server-side
+### 1. Shared Keys (Recommended for Testing)
 
-2. **Bring Your Own Key (BYOK)**
-   - Supports OpenAI, Anthropic, and Gemini
-   - Keys stored in session (not persisted)
-   - No budget limits for BYOK usage
+Configure API keys via environment variables in `.env.local`:
+
+- **Anthropic (Default)**: Set `ANTHROPIC_SHARED_API_KEY` - Required for LLM features
+- **OpenAI (Optional)**: Set `OPENAI_SHARED_API_KEY` - Alternative provider
+
+**Features:**
+- Enforced $5/month budget cap (configurable via `SHARED_BUDGET_USD`)
+- Budget tracked server-side across both providers
+- Shared keys are required for server-side LLM calls (e.g., entity identification)
+
+### 2. Bring Your Own Key (BYOK)
+
+- Supports OpenAI, Anthropic, and Gemini
+- Keys stored in session (not persisted to disk)
+- No budget limits for BYOK usage
+- Frontend automatically generates and manages session IDs in localStorage
+
+**Note:** Some server-side LLM calls require a shared key. For full functionality, set `ANTHROPIC_SHARED_API_KEY` in `.env.local`.
 
 All LLM calls are proxied through the backend (`/api/tools/llm/complete`) to keep keys secure.
+
+### Testing Your Setup
+
+After setting your API keys, test the LLM integration:
+
+```bash
+# Test LLM-generated SPARQL endpoint (uses Anthropic by default)
+node test-llm-sparql-generation.js --with-llm
+```
 
 ## SPARQL Safety & Guardrails
 
@@ -218,41 +251,41 @@ All SPARQL queries are validated before execution:
 - [x] Core libraries (context-packs, SPARQL, LLM providers, budget)
 - [x] Basic landing page and chat UI placeholders
 
-### Phase 2: Context Packs & Templates (In Progress)
-- [ ] Template registry and generator
-- [ ] Template implementations (dataset_search, entity_lookup)
+### Phase 2: Context Packs & Templates ✅
+- [x] Template registry and generator
+- [x] Template implementations (dataset_search, entity_lookup)
 
-### Phase 3: Intent Routing & Lane A
-- [ ] LLM-based intent classification
-- [ ] Slot filling
-- [ ] Template → SPARQL generation
+### Phase 3: Intent Routing & Lane A ✅
+- [x] LLM-based intent classification
+- [x] Slot filling
+- [x] Template → SPARQL generation
 
-### Phase 4: Lane B & C
-- [ ] LLM-generated SPARQL (Lane B) with guardrails
-- [ ] SPARQL repair attempts
+### Phase 4: Lane B & C ✅
+- [x] LLM-generated SPARQL (Lane B) with guardrails
+- [x] SPARQL repair attempts (via modify endpoint)
 - [ ] Preflight probes
-- [ ] User-generated SPARQL editor (Lane C)
+- [x] User-generated SPARQL editor (Lane C)
 
-### Phase 5: UI Components
-- [ ] Full chat UI with history
-- [ ] Inspect drawer (Results, SPARQL, Intent, Context, Debug tabs)
-- [ ] SPARQL editor (Monaco)
-- [ ] Results table and download
+### Phase 5: UI Components ✅
+- [x] Full chat UI with history
+- [x] Inspect drawer (Results, SPARQL, Intent, Context, Ontology, Debug, Plan tabs)
+- [x] SPARQL editor (Monaco)
+- [x] Results table and download
 
-### Phase 6: LLM Key Management UI
+### Phase 6: LLM Key Management UI (Partial)
 - [ ] Settings modal for API keys
 - [ ] Shared quota indicator
-- [ ] Key testing
+- [x] Key testing
 
-### Phase 7: Results & Run Records
-- [ ] Run record persistence
-- [ ] Results download (CSV/TSV)
-- [ ] Run summary copy
+### Phase 7: Results & Run Records ✅
+- [x] Run record persistence
+- [x] Results download (CSV/TSV)
+- [x] Run summary copy (SPARQL copy implemented)
 
-### Phase 8: Security & Guardrails
+### Phase 8: Security & Guardrails (Partial)
 - [ ] Rate limiting
-- [ ] Enhanced validation
-- [ ] Error handling
+- [x] Enhanced validation
+- [x] Error handling
 
 ## Deployment
 
@@ -273,10 +306,13 @@ npm start
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENAI_SHARED_API_KEY` | Shared OpenAI API key | - |
-| `SHARED_BUDGET_USD` | Monthly budget limit | 5 |
+| `ANTHROPIC_SHARED_API_KEY` | Shared Anthropic API key (required for LLM features) | - |
+| `OPENAI_SHARED_API_KEY` | Shared OpenAI API key (optional) | - |
+| `SHARED_BUDGET_USD` | Monthly budget limit for shared keys | 5 |
 | `SHARED_BUDGET_STOP_USD` | Budget stop threshold | 4.5 |
-| `NEXT_PUBLIC_FRINK_FEDERATION_URL` | FRINK federation endpoint | `https://frink.apps.renci.org/federation/sparql` |
+| `NEXT_PUBLIC_FRINK_FEDERATION_URL` | FRINK federation endpoint (optional - already configured in context pack) | `https://frink.apps.renci.org/federation/sparql` |
+
+**Note:** The FRINK endpoint is already configured in `context/packs/wobd.yaml`. You only need to set `NEXT_PUBLIC_FRINK_FEDERATION_URL` if you want to override the default.
 
 ## License
 
