@@ -1,45 +1,30 @@
 import { NextResponse } from "next/server";
-import { getGraphSuggestions, getQuickSuggestions } from "@/lib/registry/suggestions";
+import { getHardcodedSuggestions } from "@/lib/registry/suggestions";
 import { fetchGraphsFromRegistry, getGraphByShortname } from "@/lib/registry/fetch";
 
 /**
- * GET /api/tools/registry/graphs/suggestions?graphs=nde,ubergraph
- * Get query/topic suggestions for one or more graphs
+ * GET /api/tools/registry/graphs/suggestions?graphs=nde
+ * Returns hardcoded categorized imperative suggestions (Find..., Show me..., Which...).
+ * No subtext; one line per query; grouped by Dataset Discovery, Genes & Diseases, etc.
  */
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const graphsParam = searchParams.get("graphs");
-    const quick = searchParams.get("quick") === "true";
 
     try {
+        const categories = getHardcodedSuggestions();
+        const total = categories.reduce((n, c) => n + c.queries.length, 0);
+
         if (!graphsParam) {
-            // If no graphs specified, get suggestions for all graphs
             const allGraphs = await fetchGraphsFromRegistry();
-
-            const packId = searchParams.get("pack_id") || "wobd";
-
-            if (quick) {
-                const suggestions = getQuickSuggestions(allGraphs, packId);
-                return NextResponse.json({
-                    suggestions,
-                    total: suggestions.length,
-                    graphs: allGraphs.map(g => g.shortname),
-                });
-            } else {
-                // Full content exploration for all graphs (queries actual graph content)
-                const graphShortnames = allGraphs.map(g => g.shortname);
-                const suggestions = await getGraphSuggestions(graphShortnames, packId);
-                return NextResponse.json({
-                    suggestions,
-                    total: suggestions.length,
-                    graphs: graphShortnames,
-                });
-            }
+            return NextResponse.json({
+                categories,
+                total,
+                graphs: allGraphs.map(g => g.shortname),
+            });
         }
 
-        // Parse graph shortnames
         const graphShortnames = graphsParam.split(",").map(s => s.trim()).filter(Boolean);
-
         if (graphShortnames.length === 0) {
             return NextResponse.json(
                 { error: "No graphs specified" },
@@ -47,7 +32,6 @@ export async function GET(request: Request) {
             );
         }
 
-        // Verify graphs exist
         const graphs = [];
         for (const shortname of graphShortnames) {
             const graph = await getGraphByShortname(shortname);
@@ -60,24 +44,12 @@ export async function GET(request: Request) {
             graphs.push(graph);
         }
 
-        const packId = searchParams.get("pack_id") || "wobd";
-
-        if (quick) {
-            const suggestions = getQuickSuggestions(graphs, packId);
-            return NextResponse.json({
-                suggestions,
-                total: suggestions.length,
-                graphs: graphShortnames,
-            });
-        } else {
-            // Full content exploration - queries actual graph content
-            const suggestions = await getGraphSuggestions(graphShortnames, packId);
-            return NextResponse.json({
-                suggestions,
-                total: suggestions.length,
-                graphs: graphShortnames,
-            });
-        }
+        return NextResponse.json({
+            categories,
+            total,
+            graphs: graphShortnames,
+            ...(graphShortnames.length === 1 && { graphLabel: graphs[0].label }),
+        });
     } catch (error: any) {
         console.error("Error getting graph suggestions:", error);
         return NextResponse.json(

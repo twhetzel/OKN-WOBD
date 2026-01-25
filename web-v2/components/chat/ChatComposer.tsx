@@ -358,7 +358,7 @@ export function ChatComposer({ initialValue = "", onMessage }: ChatComposerProps
         )}
         {lane === "template" && (
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Type /sparql for SPARQL editor, or @graph for graph info
+            /sparql, @graph, or @diagram &lt;shortname&gt; for schema diagram
           </span>
         )}
       </div>

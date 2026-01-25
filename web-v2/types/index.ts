@@ -145,6 +145,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   timestamp: string;
+  mermaid?: string;
   lane?: "template" | "open" | "raw";
   run_id?: string;
   intent?: Intent;

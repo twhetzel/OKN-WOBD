@@ -151,12 +151,14 @@ The chat interface supports special `@` commands for graph discovery and query s
   - Shows graph IRI, endpoint, description, and usage instructions
 
 ### Query Suggestions
-- `@suggest` or `@suggestions` - Get query/topic suggestions for all graphs (quick mode)
-- `@suggest <shortname>` - Get query suggestions for a specific graph (e.g., `@suggest nde`)
-  - Provides topic suggestions based on graph content
-  - Includes example SPARQL queries
-  - Uses quick mode by default (based on graph descriptions)
-  - Full mode available via API for schema-based suggestions
+- `@suggest` or `@suggestions` - Get natural-language question suggestions for all graphs (quick mode)
+- `@suggest <shortname>` - Get question suggestions for a specific graph (e.g., `@suggest nde`)
+  - Returns only natural-language questions you can type directly into the chat (no SPARQL examples)
+  - Based on graph content (quick mode: descriptions; full mode: discovered health conditions, species, etc.)
+
+### Schema Diagram
+- `@diagram <shortname>` - Show a Mermaid diagram of knowledge graph classes for a graph (e.g., `@diagram nde`, `@diagram ubergraph`)
+  - Uses context pack graph metadata: classes are derived from `good_for` (e.g. Dataset) and `queryable_by` entity types (e.g. Disease, Species, Gene)
 
 ### Mode Switching
 - `/text` or `/open` - Switch to LLM-generated SPARQL mode (Lane B - LLM generates SPARQL directly)
@@ -169,6 +171,7 @@ The Tool Service API provides stable HTTP endpoints for all WOBD operations:
 ### Registry / Graph Discovery
 - `GET /api/tools/registry/graphs` - List available graphs
 - `GET /api/tools/graphs/info?shortname=<name>` - Get graph details
+- `GET /api/tools/graphs/diagram?shortname=<name>&pack_id=wobd` - Get Mermaid diagram of graph classes (from context pack metadata)
 - `GET /api/tools/registry/graphs/suggestions?graphs=<name>&quick=true` - Get query suggestions
 - `POST /api/tools/registry/graphs/refresh` - Manually refresh graph list from OKN Registry
 

@@ -131,11 +131,15 @@ function ChatPage() {
     text: string;
     lane: "template" | "open" | "raw";
   }) {
-    // Check for @graph or @suggest commands
+    // Check for @graph, @suggest, or @diagram commands
     const trimmedText = text.trim();
     if (trimmedText.startsWith("@graph") || trimmedText.startsWith("@graphs") ||
       trimmedText.startsWith("@suggest") || trimmedText.startsWith("@suggestions")) {
       await handleGraphCommand(trimmedText);
+      return;
+    }
+    if (trimmedText.startsWith("@diagram")) {
+      await handleDiagramCommand(trimmedText);
       return;
     }
 
@@ -365,6 +369,61 @@ function ChatPage() {
     }
   }
 
+  async function handleDiagramCommand(text: string) {
+    const userMessage: ChatMessage = {
+      id: generateMessageId(),
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+
+    try {
+      const parts = text.trim().split(/\s+/);
+      const shortname = (parts[1] || "").trim();
+      const url = `/api/tools/graphs/diagram?shortname=${encodeURIComponent(shortname)}`;
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errMsg = data?.error || "Failed to load diagram";
+        const available = data?.available_graphs?.length
+          ? ` Available: ${data.available_graphs.join(", ")}.`
+          : "";
+        throw new Error(errMsg + available);
+      }
+
+      const caption = data.label
+        ? `Knowledge graph schema for ${data.graphShortname} (${data.label})`
+        : `Knowledge graph schema for ${data.graphShortname}`;
+
+      const assistantMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: "assistant",
+        content: caption,
+        mermaid: data.mermaid,
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+      setSelectedMessageId(assistantMessage.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: "error",
+        content: `Error: ${message}`,
+        timestamp: new Date().toISOString(),
+        error: String(message),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function handleGraphCommand(text: string) {
     const userMessage: ChatMessage = {
       id: generateMessageId(),
@@ -401,22 +460,18 @@ function ChatPage() {
         }
 
         let content = "";
-        if (data.suggestions && data.suggestions.length > 0) {
-          const suggestionsList = data.suggestions
-            .map((s: any, idx: number) => {
-              const question = s.question || s.topic || "Query suggestion";
-              const description = s.description || "";
-              const basedOn = s.basedOn ? `\n    (Based on: ${s.basedOn})` : "";
-              const example = s.exampleQuery ? `\n    Example SPARQL:\n    ${s.exampleQuery.split("\n").map((l: string) => `    ${l}`).join("\n")}` : "";
-              return `${idx + 1}. ${question}\n    ${description}${basedOn}${example}`;
+        const categories = data.categories as Array<{ name: string; queries: string[] }> | undefined;
+        if (categories && categories.length > 0) {
+          const blocks = categories
+            .map((cat) => {
+              const lines = [cat.name, ""].concat(cat.queries);
+              return lines.join("\n");
             })
             .join("\n\n");
-
-          content = `Scientific Questions & Query Suggestions for ${shortname ? `graph: ${shortname}` : "all graphs"}\n\n` +
-            `${suggestionsList}\n\n` +
-            `💡 These questions are based on actual content discovered in the graph(s). You can ask these questions directly or use the example SPARQL queries as a starting point!`;
+          content = `Try these queries:\n\n${blocks}`;
         } else {
-          content = `No suggestions available for ${shortname || "the specified graphs"}.`;
+          const fallback = data.graphLabel || (shortname ? String(shortname) : null) || "those graphs";
+          content = `I don't have any suggestions for ${fallback} right now.`;
         }
 
         const assistantMessage: ChatMessage = {

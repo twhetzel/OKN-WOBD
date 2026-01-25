@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import type { ChatMessage } from "@/types";
 import { QueryPlanPreview } from "./QueryPlanPreview";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
@@ -114,6 +115,11 @@ function MessageBubble({
           <CollapsibleSPARQL query={message.content} />
         ) : (
           <div className="whitespace-pre-wrap break-words text-sm">{message.content}</div>
+        )}
+
+        {/* Mermaid diagram - when assistant message includes mermaid */}
+        {!isUser && message.mermaid && message.id && (
+          <MermaidDiagram code={message.mermaid} id={message.id} />
         )}
 
         {/* Query plan preview - only show for plan preview messages */}
