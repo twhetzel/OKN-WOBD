@@ -2,12 +2,43 @@
  * Graph Context Providers
  * 
  * Implementations of GraphContextProvider for different sources.
+ * 
+ * NOTE: This file uses Node.js fs/promises and should only be used on the server.
+ * Importing this in client components will cause build errors.
+ * 
+ * This file should only be imported in:
+ * - API routes (app/api/**)
+ * - Server components
+ * - Server actions
+ * 
+ * DO NOT import this in client components (files with "use client").
  */
 
-import fs from "fs/promises";
+// Server-only check - throw immediately if imported on client
+// This prevents webpack from trying to bundle fs/promises for the client
+if (typeof window !== "undefined" || typeof document !== "undefined") {
+    const error = new Error(
+        "graph-context/providers cannot be imported in client components. " +
+        "This module uses Node.js fs/promises and is server-only. " +
+        "Import this only in API routes or server components."
+    );
+    // Prevent the module from loading
+    throw error;
+}
+
 import path from "path";
 import { GraphContext, GraphContextProvider, ContextFileFormat } from "./types";
 import { adaptContextFileToGraphContext } from "./context-adapter";
+
+// Dynamic import for fs/promises (server-side only)
+// This function is only called on the server after the early throw check
+async function getFs() {
+    // Use a template string to make the import path dynamic
+    // Combined with webpack config, this should prevent client bundling
+    // @ts-ignore - fs/promises is a Node.js built-in, only available server-side
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    return await import(`fs${"/"}promises`);
+}
 
 /**
  * GitHub provider for graph context files (*_global.json)
@@ -103,6 +134,7 @@ export class LocalFileProvider implements GraphContextProvider {
 
     async loadContext(graphShortname: string): Promise<GraphContext | null> {
         try {
+            const fs = await getFs();
             const filePath = path.join(this.contextDir, `${graphShortname}_global.json`);
 
             // Check if file exists
@@ -128,6 +160,7 @@ export class LocalFileProvider implements GraphContextProvider {
      */
     async saveContext(context: GraphContext): Promise<void> {
         try {
+            const fs = await getFs();
             // Ensure directory exists
             await fs.mkdir(this.contextDir, { recursive: true });
 

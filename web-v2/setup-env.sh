@@ -25,6 +25,10 @@ SHARED_BUDGET_STOP_USD=4.5
 # FRINK Federation Endpoint (optional - already configured in context pack)
 # Only set this if you want to override the default
 # NEXT_PUBLIC_FRINK_FEDERATION_URL=https://frink.apps.renci.org/federation/sparql
+
+# Query Planner Context Source (optional - for A/B testing)
+# Set to true to use *_global.json context files instead of YAML metadata
+# USE_JSON_CONTEXT_FOR_PLANNER=true
 EOF
 
 echo "✅ Created .env.local"

@@ -23,6 +23,7 @@ import re
 import sys
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -97,6 +98,33 @@ def run_sparql(endpoint: str, query: str, timeout: int = 60) -> Dict[str, Any]:
 
 def get_bindings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return data.get("results", {}).get("bindings", [])
+
+
+# ---------------------------------------------------------------------------
+# Introspection budget (fast vs full mode, caps for timeout avoidance)
+# ---------------------------------------------------------------------------
+
+DEFAULT_SAMPLE_TRIPLES = 200_000
+DEFAULT_MAX_OBJECT_PROPS = 100
+DEFAULT_MAX_RESTRICTIONS = 50_000
+DEFAULT_MAX_SUBPROPERTY = 50_000
+
+
+@dataclass
+class IntrospectBudget:
+    """Caps and mode for introspection to avoid timeouts. fast = sampled + capped; full = no caps."""
+
+    mode: str = "fast"  # "fast" | "full"
+    sample_triples: int = DEFAULT_SAMPLE_TRIPLES
+    max_object_props: int = DEFAULT_MAX_OBJECT_PROPS
+    max_restrictions: int = DEFAULT_MAX_RESTRICTIONS
+    max_subproperty: int = DEFAULT_MAX_SUBPROPERTY
+
+    def use_sampling(self) -> bool:
+        return self.mode == "fast" and self.sample_triples > 0
+
+    def use_caps(self) -> bool:
+        return self.mode == "fast"
 
 
 # ---------------------------------------------------------------------------
@@ -290,9 +318,22 @@ def get_top_classes(
     timeout: int,
     limit: int = 50,
     iri_prefix: Optional[str] = None,
+    sample_triples: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     extra = f'\n  FILTER(STRSTARTS(STR(?s), "{iri_prefix}"))' if iri_prefix else ""
-    query = f"""{PREFIXES_RDF}
+    if sample_triples and sample_triples > 0:
+        inner = f"SELECT ?s ?class WHERE {{\n  ?s rdf:type ?class .{extra}\n}}\nLIMIT {sample_triples}"
+        query = f"""{PREFIXES_RDF}
+SELECT ?class (COUNT(DISTINCT ?s) AS ?count)
+WHERE {{
+  {{ {inner} }}
+}}
+GROUP BY ?class
+ORDER BY DESC(?count)
+LIMIT {limit}
+"""
+    else:
+        query = f"""{PREFIXES_RDF}
 SELECT ?class (COUNT(DISTINCT ?s) AS ?count)
 WHERE {{
   ?s rdf:type ?class .{extra}
@@ -359,8 +400,21 @@ def get_dataset_properties(
     primary_class_iri: str,
     timeout: int,
     limit: int = 50,
+    sample_triples: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    query = f"""{PREFIXES_RDF}
+    if sample_triples and sample_triples > 0:
+        inner = f"SELECT ?s ?p ?o WHERE {{\n  ?s rdf:type <{primary_class_iri}> ;\n     ?p ?o .\n}}\nLIMIT {sample_triples}"
+        query = f"""{PREFIXES_RDF}
+SELECT ?p (COUNT(*) AS ?count)
+WHERE {{
+  {{ {inner} }}
+}}
+GROUP BY ?p
+ORDER BY DESC(?count)
+LIMIT {limit}
+"""
+    else:
+        query = f"""{PREFIXES_RDF}
 SELECT ?p (COUNT(*) AS ?count)
 WHERE {{
   ?s rdf:type <{primary_class_iri}> ;
@@ -441,9 +495,14 @@ def build_context_kg(
     graph: str,
     primary_class_iri: str,
     timeout: int,
+    budget: Optional[IntrospectBudget] = None,
 ) -> Dict[str, Any]:
-    classes = get_top_classes(endpoint, timeout, limit=50)
-    props = get_dataset_properties(endpoint, primary_class_iri, timeout, limit=50)
+    b = budget or IntrospectBudget()
+    sample = b.sample_triples if b.use_sampling() else None
+    classes = get_top_classes(endpoint, timeout, limit=50, sample_triples=sample)
+    props = get_dataset_properties(
+        endpoint, primary_class_iri, timeout, limit=50, sample_triples=sample
+    )
 
     namespaces: Dict[str, int] = defaultdict(int)
     props_with_examples: Dict[str, Any] = {}
@@ -483,9 +542,22 @@ def get_top_predicates(
     timeout: int,
     limit: int = 100,
     iri_prefix: Optional[str] = None,
+    sample_triples: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     extra = f'\n  FILTER(STRSTARTS(STR(?s), "{iri_prefix}"))' if iri_prefix else ""
-    query = f"""{PREFIXES_RDF}
+    if sample_triples and sample_triples > 0:
+        inner = f"SELECT ?s ?p ?o WHERE {{\n  ?s ?p ?o .{extra}\n}}\nLIMIT {sample_triples}"
+        query = f"""{PREFIXES_RDF}
+SELECT ?p (COUNT(*) AS ?count)
+WHERE {{
+  {{ {inner} }}
+}}
+GROUP BY ?p
+ORDER BY DESC(?count)
+LIMIT {limit}
+"""
+    else:
+        query = f"""{PREFIXES_RDF}
 SELECT ?p (COUNT(*) AS ?count)
 WHERE {{
   ?s ?p ?o .{extra}
@@ -536,6 +608,8 @@ def get_object_properties_and_restrictions(
     endpoint: str,
     timeout: int,
     iri_prefix: Optional[str] = None,
+    max_restrictions: Optional[int] = None,
+    max_subproperty: Optional[int] = None,
 ) -> tuple[
     List[str],
     List[tuple[str, str, str]],
@@ -546,6 +620,10 @@ def get_object_properties_and_restrictions(
     in_restriction: List[tuple[str, str, str]] = []
     prop_labels: Dict[str, str] = {}
     class_filter = f'\n  FILTER(STRSTARTS(STR(?class), "{iri_prefix}"))' if iri_prefix else ""
+    cap_r = max_restrictions
+    cap_s = max_subproperty
+    lim_r = f"\nLIMIT {cap_r // 4}" if cap_r and cap_r > 0 else ""
+    lim_s = f"\nLIMIT {cap_s}" if cap_s and cap_s > 0 else ""
 
     # 1) owl:ObjectProperty
     q1 = f"""{PREFIXES_OWL}
@@ -568,7 +646,7 @@ WHERE {{
 SELECT ?class ?p ?filler
 WHERE {{
   ?class rdfs:subClassOf [ owl:onProperty ?p ; owl:someValuesFrom ?filler ] .{class_filter}
-}}"""
+}}{lim_r}"""
     for b in get_bindings(run_sparql(endpoint, q2, timeout)):
         c = b.get("class", {}).get("value")
         p = b.get("p", {}).get("value")
@@ -581,7 +659,7 @@ WHERE {{
 SELECT ?class ?p ?filler
 WHERE {{
   ?class rdfs:subClassOf [ owl:onProperty ?p ; owl:allValuesFrom ?filler ] .{class_filter}
-}}"""
+}}{lim_r}"""
     for b in get_bindings(run_sparql(endpoint, q2b, timeout)):
         c = b.get("class", {}).get("value")
         p = b.get("p", {}).get("value")
@@ -595,7 +673,7 @@ WHERE {{
 SELECT ?class ?p ?filler
 WHERE {{
   ?class owl:equivalentClass [ owl:onProperty ?p ; owl:someValuesFrom ?filler ] .{class_filter}
-}}"""
+}}{lim_r}"""
     for b in get_bindings(run_sparql(endpoint, q3, timeout)):
         c = b.get("class", {}).get("value")
         p = b.get("p", {}).get("value")
@@ -608,7 +686,7 @@ WHERE {{
 SELECT ?class ?p ?filler
 WHERE {{
   ?class owl:equivalentClass [ owl:onProperty ?p ; owl:allValuesFrom ?filler ] .{class_filter}
-}}"""
+}}{lim_r}"""
     for b in get_bindings(run_sparql(endpoint, q3b, timeout)):
         c = b.get("class", {}).get("value")
         p = b.get("p", {}).get("value")
@@ -620,7 +698,7 @@ WHERE {{
     # 4) rdfs:subPropertyOf (property hierarchy)
     q4 = f"""{PREFIXES_OWL}
 SELECT ?sub ?super
-WHERE {{ ?sub rdfs:subPropertyOf ?super . }}
+WHERE {{ ?sub rdfs:subPropertyOf ?super . }}{lim_s}
 """
     for b in get_bindings(run_sparql(endpoint, q4, timeout)):
         sub = b.get("sub", {}).get("value")
@@ -638,11 +716,23 @@ def build_context_ontology(
     graph: str,
     timeout: int,
     iri_prefix: Optional[str] = None,
+    budget: Optional[IntrospectBudget] = None,
 ) -> Dict[str, Any]:
-    classes = get_top_classes(endpoint, timeout, limit=50, iri_prefix=iri_prefix)
-    top_preds = get_top_predicates(endpoint, timeout, limit=100, iri_prefix=iri_prefix)
+    b = budget or IntrospectBudget()
+    sample = b.sample_triples if b.use_sampling() else None
+    max_r = b.max_restrictions if b.use_caps() else None
+    max_s = b.max_subproperty if b.use_caps() else None
+    max_op = b.max_object_props if b.use_caps() else None
+
+    classes = get_top_classes(
+        endpoint, timeout, limit=50, iri_prefix=iri_prefix, sample_triples=sample
+    )
+    top_preds = get_top_predicates(
+        endpoint, timeout, limit=100, iri_prefix=iri_prefix, sample_triples=sample
+    )
     obj_iris, in_restriction, prop_labels = get_object_properties_and_restrictions(
-        endpoint, timeout, iri_prefix=iri_prefix
+        endpoint, timeout, iri_prefix=iri_prefix,
+        max_restrictions=max_r, max_subproperty=max_s,
     )
 
     namespaces: Dict[str, int] = defaultdict(int)
@@ -673,10 +763,21 @@ def build_context_ontology(
         properties[iri] = entry
 
     # object_properties: in_restriction (class, filler) and examples (s, o)
+    # Rank props by restriction count; enrich with examples only for top max_object_props
     object_properties: Dict[str, Any] = {}
     by_prop: Dict[str, List[tuple[str, str]]] = defaultdict(list)
     for (c, prop, f) in in_restriction:
         by_prop[prop].append((c, f))
+
+    if max_op and max_op > 0:
+        prop_order = sorted(
+            obj_iris,
+            key=lambda p: len(by_prop.get(p, [])),
+            reverse=True,
+        )[:max_op]
+        props_to_enrich: set = set(prop_order)
+    else:
+        props_to_enrich = set(obj_iris)
 
     for prop_iri in obj_iris:
         rec: Dict[str, Any] = {
@@ -686,11 +787,12 @@ def build_context_ontology(
         restr = by_prop.get(prop_iri, [])
         if restr:
             rec["in_restriction"] = [{"class_iri": c, "filler_iri": f} for c, f in restr[:50]]
-        ex = get_examples_for_predicate(
-            endpoint, prop_iri, timeout, iri_prefix=iri_prefix
-        )
-        if ex:
-            rec["examples"] = ex
+        if prop_iri in props_to_enrich:
+            ex = get_examples_for_predicate(
+                endpoint, prop_iri, timeout, iri_prefix=iri_prefix
+            )
+            if ex:
+                rec["examples"] = ex
         object_properties[prop_iri] = rec
 
     obj = object_properties if object_properties else None
@@ -728,12 +830,17 @@ def cmd_build_one(
     primary_class: str,
     timeout: int,
     iri_prefix: Optional[str] = None,
+    budget: Optional[IntrospectBudget] = None,
 ) -> int:
     effective_timeout = max(HEAVY_GRAPH_MIN_TIMEOUT, timeout) if graph in HEAVY_GRAPHS else timeout
     if build_type == "knowledge_graph":
-        ctx = build_context_kg(endpoint, graph, primary_class, effective_timeout)
+        ctx = build_context_kg(
+            endpoint, graph, primary_class, effective_timeout, budget=budget
+        )
     elif build_type == "ontology":
-        ctx = build_context_ontology(endpoint, graph, effective_timeout, iri_prefix=iri_prefix)
+        ctx = build_context_ontology(
+            endpoint, graph, effective_timeout, iri_prefix=iri_prefix, budget=budget
+        )
     else:
         raise SystemExit(f"Unknown --type: {build_type}")
 
@@ -822,6 +929,7 @@ def cmd_build_frink(
     timeout: int,
     graphs_allowlist: List[str],
     registry_url: str,
+    budget: Optional[IntrospectBudget] = None,
 ) -> int:
     # Discover from FRINK registry (https://frink.renci.org/registry/)
     try:
@@ -837,7 +945,10 @@ def cmd_build_frink(
                 for gid, ep, gtype in graphs:
                     out = output_dir / f"{gid}_global.json"
                     try:
-                        cmd_build_one(gid, ep, gtype, out, DEFAULT_PRIMARY_CLASS, timeout)
+                        cmd_build_one(
+                            gid, ep, gtype, out, DEFAULT_PRIMARY_CLASS, timeout,
+                            budget=budget,
+                        )
                     except requests.exceptions.HTTPError as he:
                         status = he.response.status_code
                         others = [g for g, _, _ in graphs if g != gid]
@@ -871,7 +982,10 @@ def cmd_build_frink(
         gtype = "ontology" if shortname in ONTOLOGY_GRAPHS else "knowledge_graph"
         out = output_dir / f"{shortname}_global.json"
         try:
-            cmd_build_one(shortname, endpoint, gtype, out, DEFAULT_PRIMARY_CLASS, timeout)
+            cmd_build_one(
+                shortname, endpoint, gtype, out, DEFAULT_PRIMARY_CLASS, timeout,
+                budget=budget,
+            )
         except requests.exceptions.HTTPError as he:
             status = he.response.status_code
             others = [g for g, _ in registry_list if g != shortname]
@@ -901,6 +1015,7 @@ def cmd_build_obo(
     endpoint: str,
     output_dir: Path,
     timeout: int,
+    budget: Optional[IntrospectBudget] = None,
 ) -> int:
     """Per-OBO ontology views over Ubergraph: IRI prefix filter per OBO, write obo-{id}_global.json."""
     obo_base = "http://purl.obolibrary.org/obo/"
@@ -916,6 +1031,7 @@ def cmd_build_obo(
             primary_class="http://schema.org/Dataset",
             timeout=timeout,
             iri_prefix=iri_prefix,
+            budget=budget,
         )
     return 0
 
@@ -937,6 +1053,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     p1.add_argument("--primary-class", default=DEFAULT_PRIMARY_CLASS, help=f"Primary class IRI for knowledge_graph (default: {DEFAULT_PRIMARY_CLASS})")
     p1.add_argument("--iri-prefix", default=None, help="For ontology: restrict to entities with IRIs starting with this (e.g. http://purl.obolibrary.org/obo/MONDO_)")
     p1.add_argument("--timeout", type=int, default=60)
+    p1.add_argument("--mode", choices=("fast", "full"), default="fast", help="fast: sampled queries + caps (default). full: no caps.")
+    p1.add_argument("--sample-triples", type=int, default=DEFAULT_SAMPLE_TRIPLES, metavar="N", help="Cap triples scanned when sampling (fast mode). Default: %(default)s")
+    p1.add_argument("--max-object-props", type=int, default=DEFAULT_MAX_OBJECT_PROPS, metavar="N", help="Max object properties to enrich with examples (fast mode). Default: %(default)s")
+    p1.add_argument("--max-restrictions", type=int, default=DEFAULT_MAX_RESTRICTIONS, metavar="N", help="Cap restriction rows per ontology query (fast mode). Default: %(default)s")
+    p1.add_argument("--max-subproperty", type=int, default=DEFAULT_MAX_SUBPROPERTY, metavar="N", help="Cap subproperty rows (fast mode). Default: %(default)s")
 
     # build-frink
     p2 = sp.add_parser("build-frink", help="Discover from FRINK registry, run build-one for each graph")
@@ -944,6 +1065,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     p2.add_argument("--graphs", nargs="*", default=[], metavar="SHORTNAME", help="Graph shortnames to build. Default: all from registry except ubergraph and wikidata. e.g. --graphs nde to build only nde.")
     p2.add_argument("--registry-url", default=REGISTRY_URL, help="FRINK registry URL (default: %(default)s)")
     p2.add_argument("--timeout", type=int, default=60)
+    p2.add_argument("--mode", choices=("fast", "full"), default="fast", help="fast: sampled + caps (default). full: no caps.")
+    p2.add_argument("--sample-triples", type=int, default=DEFAULT_SAMPLE_TRIPLES, metavar="N")
+    p2.add_argument("--max-object-props", type=int, default=DEFAULT_MAX_OBJECT_PROPS, metavar="N")
+    p2.add_argument("--max-restrictions", type=int, default=DEFAULT_MAX_RESTRICTIONS, metavar="N")
+    p2.add_argument("--max-subproperty", type=int, default=DEFAULT_MAX_SUBPROPERTY, metavar="N")
 
     # build-obo
     p3 = sp.add_parser("build-obo", help="Per-OBO ontology views over Ubergraph")
@@ -951,6 +1077,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     p3.add_argument("--endpoint", default="https://frink.apps.renci.org/ubergraph/sparql")
     p3.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p3.add_argument("--timeout", type=int, default=60)
+    p3.add_argument("--mode", choices=("fast", "full"), default="fast")
+    p3.add_argument("--sample-triples", type=int, default=DEFAULT_SAMPLE_TRIPLES, metavar="N")
+    p3.add_argument("--max-object-props", type=int, default=DEFAULT_MAX_OBJECT_PROPS, metavar="N")
+    p3.add_argument("--max-restrictions", type=int, default=DEFAULT_MAX_RESTRICTIONS, metavar="N")
+    p3.add_argument("--max-subproperty", type=int, default=DEFAULT_MAX_SUBPROPERTY, metavar="N")
 
     ns = ap.parse_args(argv)
 
@@ -958,15 +1089,39 @@ def main(argv: Iterable[str] | None = None) -> int:
         out = ns.output
         if out is None:
             out = DEFAULT_OUTPUT_DIR / f"{ns.graph}_global.json"
+        budget = IntrospectBudget(
+            mode=ns.mode,
+            sample_triples=ns.sample_triples,
+            max_object_props=ns.max_object_props,
+            max_restrictions=ns.max_restrictions,
+            max_subproperty=ns.max_subproperty,
+        )
         return cmd_build_one(
             ns.graph, ns.endpoint, ns.type, out, ns.primary_class, ns.timeout,
             iri_prefix=ns.iri_prefix,
+            budget=budget,
         )
     if ns.cmd == "build-frink":
-        return cmd_build_frink(ns.output_dir, ns.timeout, ns.graphs, ns.registry_url)
+        return cmd_build_frink(
+            ns.output_dir, ns.timeout, ns.graphs, ns.registry_url,
+            budget=_budget_from_ns(ns),
+        )
     if ns.cmd == "build-obo":
-        return cmd_build_obo(ns.obo, ns.endpoint, ns.output_dir, ns.timeout)
+        return cmd_build_obo(
+            ns.obo, ns.endpoint, ns.output_dir, ns.timeout,
+            budget=_budget_from_ns(ns),
+        )
     return 1
+
+
+def _budget_from_ns(ns: argparse.Namespace) -> IntrospectBudget:
+    return IntrospectBudget(
+        mode=getattr(ns, "mode", "fast"),
+        sample_triples=getattr(ns, "sample_triples", DEFAULT_SAMPLE_TRIPLES),
+        max_object_props=getattr(ns, "max_object_props", DEFAULT_MAX_OBJECT_PROPS),
+        max_restrictions=getattr(ns, "max_restrictions", DEFAULT_MAX_RESTRICTIONS),
+        max_subproperty=getattr(ns, "max_subproperty", DEFAULT_MAX_SUBPROPERTY),
+    )
 
 
 if __name__ == "__main__":

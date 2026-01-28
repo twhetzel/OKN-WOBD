@@ -6,22 +6,61 @@
  */
 
 import { GraphContext, GraphContextProvider } from "./types";
-import { GitHubContextProvider, LocalFileProvider } from "./providers";
+
+// Lazy imports for providers to avoid bundling fs/promises in client
+// These are only loaded when actually needed (server-side)
+async function getProviders() {
+    if (typeof window !== "undefined") {
+        return null; // Not available on client
+    }
+    return await import("./providers");
+}
+
+async function getLocalFileProvider() {
+    const providers = await getProviders();
+    if (!providers) return null;
+    return new providers.LocalFileProvider();
+}
+
+async function getGitHubContextProvider() {
+    const providers = await getProviders();
+    if (!providers) return null;
+    return new providers.GitHubContextProvider();
+}
 
 export class GraphContextLoader {
     private providers: GraphContextProvider[] = [];
+    private localFileProvider: GraphContextProvider | null = null;
 
     constructor(providers?: GraphContextProvider[]) {
         if (providers) {
             this.providers = providers;
         } else {
-            // Default: LocalFileProvider first; GitHubContextProvider only when not disabled
-            const providersList: GraphContextProvider[] = [new LocalFileProvider()];
-            const disabled = process.env.DISABLE_GITHUB_CONTEXT === "1" || process.env.DISABLE_GITHUB_CONTEXT === "true";
-            if (!disabled) {
-                providersList.push(new GitHubContextProvider());
+            // Providers will be added lazily when needed (server-side only)
+            this.providers = [];
+        }
+    }
+
+    // Lazy initialization of providers (server-only)
+    private async ensureProviders(): Promise<void> {
+        if (typeof window !== "undefined") return; // Skip on client
+        if (this.providers.length > 0) return; // Already initialized
+        
+        // Add LocalFileProvider first (highest priority)
+        const localProvider = await getLocalFileProvider();
+        if (localProvider) {
+            this.localFileProvider = localProvider;
+            this.providers.push(localProvider);
+        }
+        
+        // Add GitHubContextProvider if not disabled
+        const disabled = process.env.DISABLE_GITHUB_CONTEXT === "1" || 
+                       process.env.DISABLE_GITHUB_CONTEXT === "true";
+        if (!disabled) {
+            const githubProvider = await getGitHubContextProvider();
+            if (githubProvider) {
+                this.providers.push(githubProvider);
             }
-            this.providers = providersList;
         }
     }
 
@@ -30,6 +69,9 @@ export class GraphContextLoader {
      * Tries providers in order until one succeeds
      */
     async loadContext(graphShortname: string): Promise<GraphContext | null> {
+        // Ensure providers are initialized (server-only, lazy init)
+        await this.ensureProviders();
+
         for (const provider of this.providers) {
             if (!provider.supports(graphShortname)) {
                 continue;
@@ -38,11 +80,11 @@ export class GraphContextLoader {
             const context = await provider.loadContext(graphShortname);
             if (context) {
                 // If we got it from GitHub and we have a local provider, cache it
-                if (context.source === "github" && provider instanceof GitHubContextProvider) {
-                    const localProvider = this.providers.find((p) => p instanceof LocalFileProvider) as LocalFileProvider;
-                    if (localProvider) {
+                if (context.source === "github" && this.localFileProvider) {
+                    const providers = await getProviders();
+                    if (providers && provider instanceof providers.GitHubContextProvider) {
                         // Cache asynchronously (don't wait)
-                        localProvider.saveContext(context).catch((err) => {
+                        (this.localFileProvider as any).saveContext(context).catch((err: unknown) => {
                             console.warn(`Failed to cache context for ${graphShortname}:`, err);
                         });
                     }
@@ -83,12 +125,17 @@ export class GraphContextLoader {
     /**
      * Clear cache for a specific graph (if provider supports it)
      */
-    clearCache(graphShortname?: string): void {
+    async clearCache(graphShortname?: string): Promise<void> {
+        await this.ensureProviders();
+        const providers = await getProviders();
+        if (!providers) return;
+        
         for (const provider of this.providers) {
-            if (provider instanceof GitHubContextProvider) {
+            if (provider instanceof providers.GitHubContextProvider) {
                 provider.clearCache(graphShortname);
             }
         }
+        // Note: LocalFileProvider doesn't have a clearCache method
     }
 }
 

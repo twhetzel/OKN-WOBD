@@ -17,9 +17,25 @@
   "example_predicates": [
     "schema:healthCondition (links to disease entities)",
     "schema:species (links to species/organism entities)",
-    "schema:infectiousAgent (links to pathogen entities)",
+    "schema:infectiousAgent (links to pathogen entities - common in RADx Data Hub datasets)",
     "schema:name (dataset name)",
-    "schema:description (dataset description)"
+    "schema:description (dataset description)",
+    "schema:identifier (dataset identifiers - GSE IDs in NCBI GEO, common across repositories)",
+    "schema:url (dataset URLs - NCBI GEO URLs, common across repositories)",
+    "schema:distribution (data access URLs - common in ImmPort datasets)",
+    "schema:contentUrl (direct content download URLs - common in ImmPort datasets)",
+    "schema:encodingFormat (file format information - common in ImmPort datasets)",
+    "schema:abstract (dataset abstracts - common in ImmPort datasets)",
+    "schema:sameAs (DOI links - common in ImmPort, Project Tycho, and Vivli datasets)",
+    "schema:author (author links - very common in NCBI GEO and Project Tycho datasets)",
+    "schema:funding (grant/funding links - common in NCBI GEO, VDJServer, and RADx Data Hub datasets)",
+    "schema:funder (funding organization links - common in VDJServer and RADx Data Hub datasets)",
+    "schema:datePublished (publication dates - common in NCBI GEO, Project Tycho, and Vivli datasets)",
+    "schema:dateCreated (creation dates - common in Project Tycho and Vivli datasets)",
+    "schema:dateModified (modification dates - common in Vivli datasets)",
+    "schema:startDate, schema:endDate (date ranges - common in VDJServer and RADx Data Hub datasets)",
+    "schema:affiliation (author affiliations - common in VDJServer datasets)",
+    "schema:alternateName (alternative names - common in VDJServer datasets)"
   ],
   "queryable_by": [
     {
@@ -73,15 +89,15 @@
   "dataset_properties": {
     "http://schema.org/author": {
       "iri": "http://schema.org/author",
-      "count": 23043
+      "count": 14665
     },
     "http://schema.org/sameAs": {
       "iri": "http://schema.org/sameAs",
-      "count": 19502
+      "count": 11124
     },
     "http://schema.org/identifier": {
       "iri": "http://schema.org/identifier",
-      "count": 12531,
+      "count": 7073,
       "curie": "schema:identifier",
       "examples": [
         {
@@ -98,28 +114,9 @@
         }
       ]
     },
-    "http://schema.org/healthCondition": {
-      "iri": "http://schema.org/healthCondition",
-      "count": 10771,
-      "curie": "schema:healthCondition",
-      "examples": [
-        {
-          "subject": "https://okn.wobd.org/dataset/immport/sdy1",
-          "object": "http://purl.obolibrary.org/obo/MONDO_0005324"
-        },
-        {
-          "subject": "https://okn.wobd.org/dataset/immport/sdy1",
-          "object": "http://purl.obolibrary.org/obo/MONDO_0011786"
-        },
-        {
-          "subject": "https://okn.wobd.org/dataset/immport/sdy10",
-          "object": "http://purl.obolibrary.org/obo/DOID_9123"
-        }
-      ]
-    },
     "http://schema.org/includedInDataCatalog": {
       "iri": "http://schema.org/includedInDataCatalog",
-      "count": 10641,
+      "count": 6452,
       "curie": "schema:includedInDataCatalog",
       "examples": [
         {
@@ -136,9 +133,28 @@
         }
       ]
     },
+    "http://schema.org/healthCondition": {
+      "iri": "http://schema.org/healthCondition",
+      "count": 6389,
+      "curie": "schema:healthCondition",
+      "examples": [
+        {
+          "subject": "https://okn.wobd.org/dataset/immport/sdy1",
+          "object": "http://purl.obolibrary.org/obo/MONDO_0005324"
+        },
+        {
+          "subject": "https://okn.wobd.org/dataset/immport/sdy1",
+          "object": "http://purl.obolibrary.org/obo/MONDO_0011786"
+        },
+        {
+          "subject": "https://okn.wobd.org/dataset/immport/sdy10",
+          "object": "http://purl.obolibrary.org/obo/DOID_9123"
+        }
+      ]
+    },
     "http://schema.org/name": {
       "iri": "http://schema.org/name",
-      "count": 9863,
+      "count": 5674,
       "curie": "schema:name",
       "examples": [
         {
@@ -157,35 +173,27 @@
     },
     "http://schema.org/url": {
       "iri": "http://schema.org/url",
-      "count": 9863
+      "count": 5674
     },
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": {
       "iri": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-      "count": 9863
+      "count": 5674
     },
     "http://schema.org/date": {
       "iri": "http://schema.org/date",
-      "count": 9810
+      "count": 5621
     },
     "http://www.w3.org/2002/07/owl#sameAs": {
       "iri": "http://www.w3.org/2002/07/owl#sameAs",
-      "count": 9741
+      "count": 5551
     },
     "http://schema.org/dateModified": {
       "iri": "http://schema.org/dateModified",
-      "count": 9211
-    },
-    "http://schema.org/datePublished": {
-      "iri": "http://schema.org/datePublished",
-      "count": 8490
-    },
-    "http://schema.org/dateCreated": {
-      "iri": "http://schema.org/dateCreated",
-      "count": 8451
+      "count": 5022
     },
     "http://schema.org/description": {
       "iri": "http://schema.org/description",
-      "count": 8126,
+      "count": 4896,
       "curie": "schema:description",
       "examples": [
         {
@@ -202,9 +210,17 @@
         }
       ]
     },
+    "http://schema.org/datePublished": {
+      "iri": "http://schema.org/datePublished",
+      "count": 4301
+    },
+    "http://schema.org/dateCreated": {
+      "iri": "http://schema.org/dateCreated",
+      "count": 4262
+    },
     "http://schema.org/species": {
       "iri": "http://schema.org/species",
-      "count": 2842,
+      "count": 2658,
       "curie": "schema:species",
       "examples": [
         {
@@ -223,7 +239,7 @@
     },
     "http://schema.org/infectiousAgent": {
       "iri": "http://schema.org/infectiousAgent",
-      "count": 2427,
+      "count": 1962,
       "curie": "schema:infectiousAgent",
       "examples": [
         {

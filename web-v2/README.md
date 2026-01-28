@@ -319,6 +319,7 @@ npm start
 | `SHARED_BUDGET_USD` | Monthly budget limit for shared keys | 5 |
 | `SHARED_BUDGET_STOP_USD` | Budget stop threshold | 4.5 |
 | `NEXT_PUBLIC_FRINK_FEDERATION_URL` | FRINK federation endpoint (optional - already configured in context pack) | `https://frink.apps.renci.org/federation/sparql` |
+| `USE_JSON_CONTEXT_FOR_PLANNER` | Use `*_global.json` context files instead of YAML metadata for query planning (A/B testing) | `false` |
 
 **Note:** The FRINK endpoint is already configured in `context/packs/wobd.yaml`. You only need to set `NEXT_PUBLIC_FRINK_FEDERATION_URL` if you want to override the default.
 
