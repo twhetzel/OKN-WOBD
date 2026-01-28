@@ -160,4 +160,17 @@ cython_debug/
 # macOS
 .DS_Store
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
 
